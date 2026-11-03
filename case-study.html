@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A case study of evaluating a synthetic-data AI recommendation console: what the evaluation found, what changed, and what it does not prove.">
+  <meta name="theme-color" content="#0b1220">
+  <title>Evaluating an AI decision assistant before trusting it | Ameen Tharani</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="1-styles.css">
+  <style>
+    .case-study { padding: 130px 0 90px; background: var(--paper); }
+    .case-study article { max-width: 760px; margin-inline: auto; }
+    .case-study .back-link { display: inline-block; margin-bottom: 28px; color: var(--mint-dark); font-weight: 700; font-size: 14px; text-decoration: none; }
+    .case-study h1 { font: 800 clamp(34px, 4.6vw, 52px)/1.1 var(--display); letter-spacing: -.04em; margin: 0 0 20px; color: var(--ink); }
+    .case-study h2 { font: 700 26px/1.2 var(--display); letter-spacing: -.02em; margin: 44px 0 14px; color: var(--ink); }
+    .case-study p, .case-study li { font-size: 18px; line-height: 1.65; color: #475467; }
+    .case-study p { margin: 0 0 18px; }
+    .case-study ul { margin: 0 0 18px; padding-left: 22px; }
+    .case-study li { margin-bottom: 8px; }
+    .case-study .note { font-size: 15px; color: var(--muted); margin-bottom: 36px; }
+    .case-study table { border-collapse: collapse; width: 100%; margin: 0 0 22px; background: white; font-size: 16px; }
+    .case-study th, .case-study td { border: 1px solid var(--line); padding: 10px 14px; text-align: left; color: var(--ink); }
+    .case-study th { background: #ecebe4; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="shell nav-wrap">
+      <a class="wordmark" href="index.html" aria-label="Ameen Tharani, home">AT<span>.</span></a>
+      <nav aria-label="Primary navigation">
+        <a href="index.html#about">About</a>
+        <a href="index.html#work">Work</a>
+        <a href="index.html#experience">Experience</a>
+        <a href="index.html#resume">Résumé</a>
+        <a href="index.html#connect">Connect</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="case-study">
+    <div class="shell">
+      <article>
+        <a class="back-link" href="index.html#work">&larr; Back to portfolio</a>
+        <h1>Evaluating an AI decision assistant before trusting it</h1>
+        <p class="note">A prototype on synthetic data, not a production system.</p>
+        <h2>Summary</h2><p>I built a small console that generates next-best-action recommendations for synthetic bank customers, then built an evaluation runner to test whether those recommendations follow the rules. I built this with an AI coding assistant, which wrote the code and test scenarios. I ran the first evaluation and approved the fixes and follow-up run. The first live run found two real rule violations that a quick read would have missed. The handling was fixed, a follow-up evaluation ran after the fixes, and I learned as much about the evaluation itself as about the model. This is a prototype on synthetic data, not a production system.</p><h2>The problem</h2><p>A recommendation assistant can sound confident and still break a rule: contacting a customer who opted out, offering a product the customer is not eligible for, or inventing a reason. Reading a few outputs does not catch that. I wanted a repeatable way to measure it and a clear record of what the results do and do not prove.</p><h2>What I built</h2><ul><li>A Streamlit console with a Generate tab (Claude Haiku 4.5 returns an action, rationale, confidence and eligibility notes) and an Evaluate tab.</li><li>An eval set of 30 synthetic scenarios, 15 of them hard cases (thin data, conflicting rules, suppression rules, expired offers).</li><li>Two scoring layers on five dimensions, each 0 or 1: eligibility compliance and format are deterministic code; groundedness, actionability, and confidence/abstention are scored by a Haiku judge using a written rubric.</li><li>CSV and JSON exports for every run, with per-dimension pass rates.</li></ul><h2>Run 1: what the evaluation found</h2><p>All 30 scenarios were scored live with no placeholders. Estimated cost was about $0.10 (an estimate, not a billing total).</p><table><thead><tr><th>Dimension</th><th>Run 1</th></tr></thead><tbody><tr><td>Eligibility compliance</td><td>28/30</td></tr><tr><td>Groundedness</td><td>27/30</td></tr><tr><td>Actionability</td><td>30/30</td></tr><tr><td>Confidence and abstention</td><td>22/30</td></tr><tr><td>Format</td><td>30/30</td></tr><tr><td>All five passed</td><td>22/30 (hard cases: 8/15)</td></tr></tbody></table><p>The headline number is less interesting than the failures behind it. In two scenarios (scen-005 and scen-025) the customer had reached the three-contact cap, and the rule said to suppress every promotional channel. The model still recommended an in-app upgrade, reasoning that in-app is not an outbound contact. It invented an exception the rule didn&#x27;t include. Reading the scenario text confirmed these are real rule violations, not judge noise.</p><p>Reading the other flagged items showed the scoring itself was imperfect:</p><ul><li>The judge penalized high confidence when the model confidently chose a safe escalation, because the rubric did not separate confidence in the safe action from confidence in a prohibited one.</li><li>One scenario referred to an offer that &quot;expired Sep 13&quot; without giving the model an as-of date, so the model and the judge disagreed about whether Sep 13 was in the past.</li><li>In one case the judge missed an unsupported claim that a banker call was suppressed.</li></ul><p>So 22/30 is not an accuracy number. It is a list of things to look at.</p><h2>What I changed</h2><ul><li>A guardrail that blocks any promotion the contact-cap rules prohibit. It keeps the model&#x27;s original answer and shows the corrected output separately, so the intervention is visible rather than hidden.</li><li>Clearer confidence semantics (safe routing versus the underlying product action).</li><li>A pinned as-of date for scenarios.</li><li>Run recovery after a dropped connection during the rerun: per-scenario checkpoints and reopenable saved runs. This is same-host storage, not permanent.</li></ul><h2>Run 2: the rerun</h2><table><thead><tr><th>Dimension</th><th>Run 2</th></tr></thead><tbody><tr><td>Eligibility compliance</td><td>30/30</td></tr><tr><td>Groundedness</td><td>29/30</td></tr><tr><td>Actionability</td><td>29/30</td></tr><tr><td>Confidence and abstention</td><td>28/30</td></tr><tr><td>Format</td><td>30/30</td></tr><tr><td>All five passed</td><td>27/30 (hard cases: 14/15)</td></tr></tbody></table><p>Both contact-cap scenarios now chose &quot;take no action&quot;. The guardrail did not need to intervene: zero interventions in this run. Estimated cost was about $0.12.</p><p>What I will not claim: a clean improvement from 22 to 27. The generator inputs, operational constraints, confidence semantics, as-of date, and judge rubric all changed between runs, so the two are not directly comparable. It is also one run, on synthetic data, with the same model family as the generator and judge.</p><p>The rerun still showed the judge is imperfect. In scen-022 and scen-027, the model chose a permitted action but invented a restriction to justify it. In scen-011, an actionability flag was debatable, and its failure category was empty, so the category chart undercounted failures.</p><h2>What I learned</h2><p>The most valuable result was reading failures, not the pass rate.</p><ul><li>An eval is a product too. Ambiguous rubric wording and a missing date produced false alarms.</li><li>Models can follow a rule in their action and still misstate it in their rationale. Scoring only the action would hide that.</li><li>A guardrail is a backstop. In run 2 the model chose no action on both contact-cap cases without the guardrail firing, but several things changed between runs, so I can&#x27;t say which change caused it.</li></ul><h2>Limitations</h2><ul><li>Synthetic scenarios, 30 in total. Not real customers.</li><li>Generator and judge are the same model family.</li><li>Two runs only; the second is not a controlled comparison.</li><li>The Review and Dashboard tabs still use sample data.</li><li>Not ready for real customer decisions.</li></ul>
+      </article>
+    </div>
+  </main>
+  <footer>
+    <div class="shell footer-inner">
+      <p>© 2026 Ameen Tharani</p>
+      <p>Product · AI · Platforms</p>
+    </div>
+  </footer>
+</body>
+</html>
